@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
             AIOProdAppTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Greeting(
-                        name = "Android",
+                        name = "Liz-bert",
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
