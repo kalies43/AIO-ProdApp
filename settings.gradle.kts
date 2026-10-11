@@ -24,4 +24,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "AIO-ProdApp"
 include(":app")
- 
