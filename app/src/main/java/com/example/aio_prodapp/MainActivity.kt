@@ -7,12 +7,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,18 +23,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.shadow.Shadow
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.DpOffset
@@ -44,12 +40,11 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.aio_prodapp.ui.theme.AIOProdAppTheme
-import org.intellij.lang.annotations.JdkConstants
+
 /*
 Kulang kapa ng onClick functionality,
 Recyclesitems (ung cards na reusable for the notes)
 ung status summary like, 3 notes 2reminders. and the rest of the screens to do.
-
 */
 
 class MainActivity : ComponentActivity() {
@@ -71,95 +66,31 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainAppStructure() {
+fun MainAppStructure(startIndex: Int = 0) {
+    // The selected tab lives here so both the bottom bar and the content can use it
+    var selectedIndex by remember { mutableIntStateOf(startIndex) }
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = { TopBar() },
-        bottomBar = { BottomBar() }
+        bottomBar = {
+            BottomBar(
+                selectedIndex = selectedIndex,
+                onTabSelected = { selectedIndex = it }
+            )
+        }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // My screen content
-            MyNotesScreen()
-        }
-    }
-}
-
-@Composable
-fun MyNotesScreen() {
-    Column() {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical =  8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "my notes",
-                fontFamily = MaterialTheme.typography.titleLarge.fontFamily,
-                fontSize = 50.sp,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(5.dp),
-            )
-            Row (
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-
-            ){
-                Icon(
-                    painterResource(id = R.drawable.icon_calendar),
-                    contentDescription = "Calendar",
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(color = MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(10.dp)
-
-
-
-                )
-                AddNote()
+            when (selectedIndex) {
+                0 -> MyNotesScreen()   // lives in NotesScreen.kt
+                2 -> TasksScreen()     // lives in TasksScreen.kt
+                else -> { /* Focus and Profile screens coming later */ }
             }
         }
-
-    }
-
-}
-
-@Composable
-fun AddNote(){
-    Row(
-        Modifier
-            .padding(1.dp)
-            .clip(shape = RoundedCornerShape(4.dp))
-            .background(color = MaterialTheme.colorScheme.secondary)
-            .padding(1.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        Icon(
-            painter = painterResource(id = R.drawable.icon_add),
-            contentDescription = "Add note",
-            tint = Color.White,
-            modifier = Modifier.padding(5.dp)
-
-        )
-        Text(
-            text = "Add note",
-            fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
-            fontSize = 25.sp,
-            color = Color.White,
-            modifier = Modifier.padding(
-                start = 1.dp,   // Keeps your left space
-                top = 4.dp,      // Keeps your top space
-                end = 14.dp,     // Keeps your right space
-                bottom = 0.dp   // Changes the space below the text
-            )
-        )
-
     }
 }
 
@@ -169,7 +100,7 @@ fun TopBar() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp, vertical =  8.dp),
+                .padding(16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             IconButton(onClick = { }) {
@@ -189,9 +120,7 @@ fun TopBar() {
 }
 
 @Composable
-fun BottomBar() {
-    var selectedIndex by remember { mutableIntStateOf(0) }
-
+fun BottomBar(selectedIndex: Int, onTabSelected: (Int) -> Unit) {
     val tabs = listOf(
         R.drawable.icon_note_edit to "Notes",
         R.drawable.icon_target to "Focus",
@@ -210,7 +139,7 @@ fun BottomBar() {
                 iconRes = iconRes,
                 label = label,
                 selected = selectedIndex == index,
-                onClick = { selectedIndex = index }
+                onClick = { onTabSelected(index) }
             )
         }
     }
@@ -257,7 +186,6 @@ fun BottomBarItem(
         Text(text = label, color = contentColor, fontSize = 12.sp)
     }
 }
-
 
 @Preview(showBackground = true)
 @Composable
