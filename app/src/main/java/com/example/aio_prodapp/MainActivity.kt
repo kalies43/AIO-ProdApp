@@ -4,8 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,6 +44,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.example.aio_prodapp.debug.DebugPanelDialog
+import com.example.aio_prodapp.debug.DebugTools
 import com.example.aio_prodapp.ui.theme.AIOProdAppTheme
 
 /*
@@ -69,10 +76,14 @@ class MainActivity : ComponentActivity() {
 fun MainAppStructure(startIndex: Int = 0) {
     // The selected tab lives here so both the bottom bar and the content can use it
     var selectedIndex by remember { mutableIntStateOf(startIndex) }
+    var pendingNoteId by remember { mutableStateOf<Int?>(null) }
+    var pendingTaskId by remember { mutableStateOf<Int?>(null) }
+    // Debug builds only: long-press the hamburger icon to open the debug panel (moves to the Profile avatar in Phase 6)
+    var showDebugPanel by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        topBar = { TopBar() },
+        topBar = { TopBar(onHamburgerLongPress = { showDebugPanel = true }) },
         bottomBar = {
             BottomBar(
                 selectedIndex = selectedIndex,
@@ -86,16 +97,27 @@ fun MainAppStructure(startIndex: Int = 0) {
                 .padding(innerPadding)
         ) {
             when (selectedIndex) {
-                0 -> MyNotesScreen()   // lives in NotesScreen.kt
-                2 -> TasksScreen()     // lives in TasksScreen.kt
+                0 -> MyNotesScreen(
+                    pendingNoteId = pendingNoteId,
+                    onClearPendingNoteId = { pendingNoteId = null }
+                )
+                2 -> TasksScreen(
+                    pendingTaskId = pendingTaskId,
+                    onClearPendingTaskId = { pendingTaskId = null }
+                )
                 else -> { /* Focus and Profile screens coming later */ }
             }
         }
     }
+
+    if (showDebugPanel) {
+        DebugPanelDialog(onDismiss = { showDebugPanel = false })
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TopBar() {
+fun TopBar(onHamburgerLongPress: () -> Unit = {}) {
     Surface(color = Color.Transparent) {
         Row(
             modifier = Modifier
@@ -103,7 +125,17 @@ fun TopBar() {
                 .padding(16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = { }) {
+            // The hamburger has no function in v1; long-press opens the debug panel in debug builds only.
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .combinedClickable(
+                        onClick = { },
+                        onLongClick = if (DebugTools.enabled) onHamburgerLongPress else null
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
                     painter = painterResource(id = R.drawable.icon_hamburg),
                     contentDescription = null
