@@ -40,8 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
@@ -49,6 +51,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -73,11 +76,27 @@ private val DialogButton = Color(0xFF55B091)
 private val NoteDeleteContainer = Color(0xFFF8C4C4)
 private val NoteDeleteIcon = Color(0xFFB03A3A)
 
+private val NoteGreen = Color(0xFF54B192)     // reminder date + description text on the cards
+private val AddNoteGreen = Color(0xFF6EDDB8)  // "+ Add Note" pill
+
 @Composable
 private fun noteCardColor(): Color =
     MaterialTheme.colorScheme.primaryContainer
         .copy(alpha = 0.4f)
         .compositeOver(MaterialTheme.colorScheme.surfaceContainerLowest)
+
+// ---------- Layout and text sizes (change these to tweak the Home screen) ----------
+// Dongle draws small, so these are bigger than the numbers you would normally use.
+
+private val ScreenPadding = 36.dp
+private val CardHeight = 174.dp
+
+private val SubtitleSize = 20.sp
+private val CardReminderSize = 17.sp
+private val CardTitleSize = 18.sp
+private val CardBodySize = 17.sp
+private val CardBodyLineHeight = 16.sp
+private val CardDateSize = 16.sp
 
 // ---------- Date helpers ----------
 // The date picker works in UTC, so we format in UTC to avoid being off by one day.
@@ -148,11 +167,13 @@ fun MyNotesScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Header: title on the left, "+ Add Note" pill on the right (no calendar button in the design)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, start = 16.dp, end = 16.dp, bottom = 0.dp),
+                .padding(top = 16.dp, start = ScreenPadding, end = ScreenPadding),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 text = "my notes",
@@ -160,30 +181,20 @@ fun MyNotesScreen(
                 fontSize = 50.sp,
                 lineHeight = 50.sp,
                 color = MaterialTheme.colorScheme.inversePrimary,
-                modifier = Modifier.padding(5.dp, 1.dp),
+                maxLines = 1,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
             )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    painterResource(id = R.drawable.icon_calendar),
-                    contentDescription = "Calendar",
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(color = MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(10.dp)
-                )
-                AddNote(onClick = { showAddDialog = true })
-            }
+            Spacer(Modifier.width(12.dp))
+            AddNote(onClick = { showAddDialog = true })
         }
         Text(
             text = "${uiState.noteCount} notes\n${uiState.reminderCount} reminders",
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.padding(start = 21.dp)
+            fontSize = SubtitleSize,
+            lineHeight = 17.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.padding(start = ScreenPadding + 5.dp)
         )
 
         Spacer(Modifier.height(16.dp))
@@ -197,7 +208,7 @@ fun MyNotesScreen(
             ) {
                 Text(
                     text = "No notes yet. Tap + Add Note to create one.",
-                    fontSize = 14.sp,
+                    fontSize = 20.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(32.dp)
@@ -209,9 +220,9 @@ fun MyNotesScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 12.dp, bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 items(uiState.notes, key = { it.id }) { note ->
                     NoteCard(
@@ -303,37 +314,49 @@ fun NoteCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val shape = RoundedCornerShape(20.dp)
-    val textColor = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(22.dp)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(170.dp)
+            .height(CardHeight)
+            // The shadow goes first so the clip below does not cut it off.
+            // The card color is opaque, which the drop shadow needs.
+            .dropShadow(
+                shape = shape,
+                shadow = Shadow(
+                    radius = 4.dp,
+                    spread = 0.dp,
+                    color = Color.Black,
+                    offset = DpOffset(x = 0.dp, y = 4.dp),
+                    alpha = 0.25f
+                )
+            )
             .clip(shape)
             .background(noteCardColor(), shape)
             .clickable(onClick = onClick)
-            .padding(14.dp)
+            .padding(start = 14.dp, end = 12.dp, top = 14.dp, bottom = 12.dp)
     ) {
+        // Top row: reminder (bell + date) on the left, edit and delete on the right
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(20.dp),
+                .height(22.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (note.reminderDate != null) {
                 Icon(
                     painter = painterResource(id = R.drawable.icon_bell),
                     contentDescription = "Reminder",
-                    modifier = Modifier.size(12.dp),
-                    tint = textColor
+                    modifier = Modifier.size(13.dp),
+                    tint = NoteGreen
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
                     text = shortDateFromMillis(note.reminderDate),
-                    fontSize = 10.sp,
+                    fontSize = CardReminderSize,
                     fontWeight = FontWeight.Bold,
-                    color = textColor
+                    color = NoteGreen
                 )
             }
             Spacer(Modifier.weight(1f))
@@ -358,18 +381,17 @@ fun NoteCard(
 
         Text(
             text = note.title.uppercase(),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
+            fontSize = CardTitleSize,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = note.description,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-            color = textColor,
+            fontSize = CardBodySize,
+            lineHeight = CardBodyLineHeight,
+            color = NoteGreen,
             maxLines = 4,
             overflow = TextOverflow.Ellipsis
         )
@@ -378,8 +400,8 @@ fun NoteCard(
 
         Text(
             text = shortDateFromMillis(note.createdAt),
-            fontSize = 10.sp,
-            color = textColor.copy(alpha = 0.6f)
+            fontSize = CardDateSize,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
         )
     }
 }
@@ -658,37 +680,33 @@ private fun NoteTextField(
     )
 }
 
-// ---------- Add Note button (header) ----------
+// ---------- Add Note button (header pill) ----------
 
 @Composable
 fun AddNote(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
     Row(
-        Modifier
-            .padding(1.dp)
-            .clip(shape = RoundedCornerShape(4.dp))
+        modifier = Modifier
+            .clip(shape)
+            .background(AddNoteGreen, shape)
             .clickable(onClick = onClick)
-            .background(color = MaterialTheme.colorScheme.secondary)
-            .padding(1.dp),
+            .padding(start = 12.dp, end = 16.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
         Icon(
             painter = painterResource(id = R.drawable.icon_add),
-            contentDescription = "Add note",
+            contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.padding(5.dp)
+            modifier = Modifier.size(18.dp)
         )
+        Spacer(Modifier.width(6.dp))
         Text(
-            text = "Add note",
+            text = "Add Note",
             fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
-            fontSize = 25.sp,
+            fontSize = 24.sp,
             color = Color.White,
-            modifier = Modifier.padding(
-                start = 1.dp,
-                top = 4.dp,
-                end = 14.dp,
-                bottom = 0.dp
-            )
+            modifier = Modifier.padding(top = 4.dp)
         )
     }
 }

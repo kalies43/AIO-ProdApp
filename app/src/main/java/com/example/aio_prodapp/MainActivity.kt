@@ -101,11 +101,12 @@ fun MainAppStructure(startIndex: Int = 0) {
                     pendingNoteId = pendingNoteId,
                     onClearPendingNoteId = { pendingNoteId = null }
                 )
+                1 -> FocusScreen()
                 2 -> TasksScreen(
                     pendingTaskId = pendingTaskId,
                     onClearPendingTaskId = { pendingTaskId = null }
                 )
-                else -> { /* Focus and Profile screens coming later */ }
+                3 -> ProfileScreen(onOpenDebugPanel = { showDebugPanel = true })
             }
         }
     }
@@ -125,22 +126,18 @@ fun TopBar(onHamburgerLongPress: () -> Unit = {}) {
                 .padding(16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // The hamburger has no function in v1; long-press opens the debug panel in debug builds only.
+            // The design has no hamburger. In debug builds this invisible spot still opens the debug panel on long-press.
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(CircleShape)
-                    .combinedClickable(
-                        onClick = { },
-                        onLongClick = if (DebugTools.enabled) onHamburgerLongPress else null
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.icon_hamburg),
-                    contentDescription = null
-                )
-            }
+                    .then(
+                        if (DebugTools.enabled) {
+                            Modifier.combinedClickable(onClick = { }, onLongClick = onHamburgerLongPress)
+                        } else {
+                            Modifier
+                        }
+                    )
+            )
             IconButton(onClick = { }) {
                 Icon(
                     painter = painterResource(id = R.drawable.icon_bell),
