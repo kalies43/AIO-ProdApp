@@ -1,6 +1,8 @@
 package com.example.aio_prodapp
 
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,38 +32,40 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.aio_prodapp.data.NoteEntity
+import com.example.aio_prodapp.viewmodel.AppViewModelProvider
+import com.example.aio_prodapp.viewmodel.NotesUiState
+import com.example.aio_prodapp.viewmodel.NotesViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-
-// ---------- Data ----------
-
-data class Note(
-    val id: Int,
-    val title: String,
-    val description: String,
-    val reminder: String,   // "MM/dd/yyyy", empty = no reminder
-    val created: String     // e.g. "Sep 27"
-)
 
 // ---------- Colors (from the Figma design) ----------
 
@@ -72,11 +76,27 @@ private val DialogButton = Color(0xFF55B091)
 private val NoteDeleteContainer = Color(0xFFF8C4C4)
 private val NoteDeleteIcon = Color(0xFFB03A3A)
 
+private val NoteGreen = Color(0xFF54B192)     // reminder date + description text on the cards
+private val AddNoteGreen = Color(0xFF6EDDB8)  // "+ Add Note" pill
+
 @Composable
 private fun noteCardColor(): Color =
     MaterialTheme.colorScheme.primaryContainer
         .copy(alpha = 0.4f)
         .compositeOver(MaterialTheme.colorScheme.surfaceContainerLowest)
+
+// ---------- Layout and text sizes (change these to tweak the Home screen) ----------
+// Dongle draws small, so these are bigger than the numbers you would normally use.
+
+private val ScreenPadding = 36.dp
+private val CardHeight = 174.dp
+
+private val SubtitleSize = 20.sp
+private val CardReminderSize = 17.sp
+private val CardTitleSize = 18.sp
+private val CardBodySize = 17.sp
+private val CardBodyLineHeight = 16.sp
+private val CardDateSize = 16.sp
 
 // ---------- Date helpers ----------
 // The date picker works in UTC, so we format in UTC to avoid being off by one day.
@@ -84,7 +104,8 @@ private fun noteCardColor(): Color =
 private val utc: TimeZone = TimeZone.getTimeZone("UTC")
 
 private fun reminderToMillis(text: String): Long? = try {
-    SimpleDateFormat("MM/dd/yyyy", Locale.US).apply { timeZone = utc }.parse(text)?.time
+    if (text.isBlank()) null
+    else SimpleDateFormat("MM/dd/yyyy", Locale.US).apply { timeZone = utc }.parse(text)?.time
 } catch (e: Exception) {
     null
 }
@@ -92,124 +113,197 @@ private fun reminderToMillis(text: String): Long? = try {
 private fun millisToReminder(millis: Long): String =
     SimpleDateFormat("MM/dd/yyyy", Locale.US).apply { timeZone = utc }.format(Date(millis))
 
-private fun shortDate(reminder: String): String {
-    val millis = reminderToMillis(reminder) ?: return reminder
-    return SimpleDateFormat("MMM d", Locale.getDefault()).apply { timeZone = utc }.format(Date(millis))
-}
-
-private fun today(): String = SimpleDateFormat("MMM d", Locale.getDefault()).format(Date())
+private fun shortDateFromMillis(millis: Long): String =
+    SimpleDateFormat("MMM d", Locale.getDefault()).apply { timeZone = utc }.format(Date(millis))
 
 // ---------- Screen ----------
 
 @Composable
-fun MyNotesScreen() {
-    val notes = remember {
-        mutableStateListOf(
-            Note(1, "Weekly Review", "Reflect on what went well, what to improve, and set intentions for next week.", "09/30/2026", "Sep 27"),
-            Note(2, "Book List", "Atomic Habits, Deep Work, The Power of Now, Digital Minimalism.", "", "Sep 25"),
-            Note(3, "Study Plan", "Finish the wireframes and review for the exam.", "10/05/2026", "Sep 20")
+fun MyNotesScreen(
+    pendingNoteId: Int? = null,
+    onClearPendingNoteId: () -> Unit = {},
+    viewModel: NotesViewModel? = null
+) {
+    val context = LocalContext.current
+    val isPreview = LocalInspectionMode.current || context.applicationContext !is AioApplication
+    val actualViewModel: NotesViewModel? = if (isPreview) {
+        null
+    } else if (viewModel != null) {
+        viewModel
+    } else {
+        viewModel(factory = AppViewModelProvider.Factory)
+    }
+    val uiState = if (isPreview || actualViewModel == null) {
+        NotesUiState(
+            notes = listOf(
+                NoteEntity(1, "Weekly Review", "Reflect on what went well, what to improve, and set intentions for next week.", reminderDate = 1790726400000L, createdAt = 1758931200000L),
+                NoteEntity(2, "Book List", "Atomic Habits, Deep Work, The Power of Now, Digital Minimalism.", reminderDate = null, createdAt = 1758758400000L),
+                NoteEntity(3, "Study Plan", "Finish the wireframes and review for the exam.", reminderDate = 1791158400000L, createdAt = 1758326400000L)
+            ),
+            noteCount = 3,
+            reminderCount = 2,
+            isLoaded = true
         )
+    } else {
+        val state by actualViewModel.uiState.collectAsStateWithLifecycle()
+        state
     }
 
-    var editingNote by remember { mutableStateOf<Note?>(null) }
+    var editingNote by remember { mutableStateOf<NoteEntity?>(null) }
+    var deletingNote by remember { mutableStateOf<NoteEntity?>(null) }
     var showAddDialog by remember { mutableStateOf(false) }
 
-    // Calculated from the list, so they update automatically
-    val noteCount = notes.size
-    val reminderCount = notes.count { it.reminder.isNotEmpty() }
+    // Support pendingNoteId from notifications or deep links
+    LaunchedEffect(pendingNoteId) {
+        if (pendingNoteId != null && actualViewModel != null) {
+            val note = actualViewModel.getNote(pendingNoteId)
+            if (note != null) {
+                editingNote = note
+            } else {
+                Toast.makeText(context, "This note no longer exists.", Toast.LENGTH_SHORT).show()
+            }
+            onClearPendingNoteId()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Header: title on the left, "+ Add Note" pill on the right (no calendar button in the design)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, start = 16.dp, end = 16.dp, bottom = 0.dp),
+                .padding(top = 16.dp, start = ScreenPadding, end = ScreenPadding),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 text = "my notes",
                 fontFamily = MaterialTheme.typography.titleLarge.fontFamily,
                 fontSize = 50.sp,
                 lineHeight = 50.sp,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(5.dp, 1.dp),
+                color = MaterialTheme.colorScheme.inversePrimary,
+                maxLines = 1,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
             )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    painterResource(id = R.drawable.icon_calendar),
-                    contentDescription = "Calendar",
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(color = MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(10.dp)
-                )
-                AddNote(onClick = { showAddDialog = true })
-            }
+            Spacer(Modifier.width(12.dp))
+            AddNote(onClick = { showAddDialog = true })
         }
         Text(
-            text = "$noteCount notes\n$reminderCount reminders",
-            fontSize = 18.sp,
-            lineHeight = 14.sp,
-            color = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.padding(start = 21.dp)
+            text = "${uiState.noteCount} notes\n${uiState.reminderCount} reminders",
+            fontSize = SubtitleSize,
+            lineHeight = 17.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.padding(start = ScreenPadding + 5.dp)
         )
 
         Spacer(Modifier.height(16.dp))
 
-        // Two-column grid of note cards (also recycles its items)
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            items(notes, key = { it.id }) { note ->
-                NoteCard(
-                    note = note,
-                    onClick = { editingNote = note },
-                    onEdit = { editingNote = note },
-                    onDelete = { notes.removeAll { it.id == note.id } }
+        if (uiState.notes.isEmpty() && uiState.isLoaded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No notes yet. Tap + Add Note to create one.",
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(32.dp)
                 )
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentPadding = PaddingValues(start = ScreenPadding, end = ScreenPadding, top = 12.dp, bottom = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                items(uiState.notes, key = { it.id }) { note ->
+                    NoteCard(
+                        note = note,
+                        onClick = { editingNote = note },
+                        onEdit = { editingNote = note },
+                        onDelete = { deletingNote = note }
+                    )
+                }
             }
         }
     }
 
-    // Edit Note card: shows when a note is tapped
+    // Edit Note dialog: shows when a note is tapped
     editingNote?.let { note ->
         NoteDialog(
             heading = "EDIT NOTE",
             saveLabel = "Save Changes",
             initialTitle = note.title,
             initialDescription = note.description,
-            initialReminder = note.reminder,
+            initialReminder = note.reminderDate?.let { millisToReminder(it) } ?: "",
             onDismiss = { editingNote = null },
             onSave = { title, description, reminder ->
-                val index = notes.indexOfFirst { it.id == note.id }
-                if (index >= 0) {
-                    notes[index] = note.copy(title = title, description = description, reminder = reminder)
-                }
+                actualViewModel?.saveNote(
+                    context = context,
+                    id = note.id,
+                    title = title,
+                    description = description,
+                    reminderDate = reminderToMillis(reminder),
+                    onResult = { success ->
+                        if (!success) {
+                            Toast.makeText(context, "Couldn't save. Try again.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
                 editingNote = null
             }
         )
     }
 
-    // Add Note card: shows when "+ Add Note" is tapped
+    // Add Note dialog: shows when "+ Add Note" is tapped
     if (showAddDialog) {
         NoteDialog(
             heading = "ADD NOTE",
             saveLabel = "Add Note",
             onDismiss = { showAddDialog = false },
             onSave = { title, description, reminder ->
-                val newId = (notes.maxOfOrNull { it.id } ?: 0) + 1
-                notes.add(0, Note(newId, title, description, reminder, today()))
+                actualViewModel?.saveNote(
+                    context = context,
+                    id = null,
+                    title = title,
+                    description = description,
+                    reminderDate = reminderToMillis(reminder),
+                    onResult = { success ->
+                        if (!success) {
+                            Toast.makeText(context, "Couldn't save. Try again.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
                 showAddDialog = false
             }
+        )
+    }
+
+    // Delete Confirmation dialog
+    deletingNote?.let { note ->
+        DeleteConfirmationDialog(
+            message = "Are you sure you want to delete?",
+            onConfirm = {
+                actualViewModel?.deleteNote(
+                    context = context,
+                    id = note.id,
+                    onResult = { success ->
+                        if (!success) {
+                            Toast.makeText(context, "Couldn't delete. Try again.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
+                deletingNote = null
+            },
+            onDismiss = { deletingNote = null }
         )
     }
 }
@@ -218,42 +312,54 @@ fun MyNotesScreen() {
 
 @Composable
 fun NoteCard(
-    note: Note,
+    note: NoteEntity,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val shape = RoundedCornerShape(20.dp)
-    val textColor = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(22.dp)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(170.dp)
+            .height(CardHeight)
+            // The shadow goes first so the clip below does not cut it off.
+            // The card color is opaque, which the drop shadow needs.
+            .dropShadow(
+                shape = shape,
+                shadow = Shadow(
+                    radius = 4.dp,
+                    spread = 0.dp,
+                    color = Color.Black,
+                    offset = DpOffset(x = 0.dp, y = 4.dp),
+                    alpha = 0.25f
+                )
+            )
             .clip(shape)
             .background(noteCardColor(), shape)
             .clickable(onClick = onClick)
-            .padding(14.dp)
+            .padding(start = 14.dp, end = 12.dp, top = 14.dp, bottom = 12.dp)
     ) {
+        // Top row: reminder (bell + date) on the left, edit and delete on the right
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(20.dp),
+                .height(22.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (note.reminder.isNotEmpty()) {
+            if (note.reminderDate != null) {
                 Icon(
                     painter = painterResource(id = R.drawable.icon_bell),
                     contentDescription = "Reminder",
-                    modifier = Modifier.size(12.dp),
-                    tint = textColor
+                    modifier = Modifier.size(13.dp),
+                    tint = NoteGreen
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    text = shortDate(note.reminder),
-                    fontSize = 10.sp,
+                    text = shortDateFromMillis(note.reminderDate),
+                    fontSize = CardReminderSize,
                     fontWeight = FontWeight.Bold,
-                    color = textColor
+                    color = NoteGreen
                 )
             }
             Spacer(Modifier.weight(1f))
@@ -278,18 +384,17 @@ fun NoteCard(
 
         Text(
             text = note.title.uppercase(),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = textColor,
+            fontSize = CardTitleSize,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = note.description,
-            fontSize = 11.sp,
-            lineHeight = 14.sp,
-            color = textColor,
+            fontSize = CardBodySize,
+            lineHeight = CardBodyLineHeight,
+            color = NoteGreen,
             maxLines = 4,
             overflow = TextOverflow.Ellipsis
         )
@@ -297,9 +402,9 @@ fun NoteCard(
         Spacer(Modifier.weight(1f))
 
         Text(
-            text = note.created,
-            fontSize = 10.sp,
-            color = textColor.copy(alpha = 0.6f)
+            text = shortDateFromMillis(note.createdAt),
+            fontSize = CardDateSize,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
         )
     }
 }
@@ -329,7 +434,7 @@ private fun MiniIconButton(
     }
 }
 
-// ---------- The Add / Edit card ----------
+// ---------- The Add / Edit dialog ----------
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -476,6 +581,79 @@ fun NoteDialog(
     }
 }
 
+// ---------- Delete Confirmation Dialog ----------
+
+@Composable
+fun DeleteConfirmationDialog(
+    message: String = "Are you sure you want to delete?",
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .clip(RoundedCornerShape(24.dp))
+                .background(DialogContainer)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = message,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.Black,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(24.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Yes (outlined, left)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.5.dp, DialogButton, RoundedCornerShape(10.dp))
+                        .clickable(onClick = onConfirm)
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Yes",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = DialogButton
+                    )
+                }
+                // No (filled green, right)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(DialogButton)
+                        .clickable(onClick = onDismiss)
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun FieldLabel(text: String) {
     Text(
@@ -505,37 +683,33 @@ private fun NoteTextField(
     )
 }
 
-// ---------- Add Note button (header) ----------
+// ---------- Add Note button (header pill) ----------
 
 @Composable
 fun AddNote(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
     Row(
-        Modifier
-            .padding(1.dp)
-            .clip(shape = RoundedCornerShape(4.dp))
+        modifier = Modifier
+            .clip(shape)
+            .background(AddNoteGreen, shape)
             .clickable(onClick = onClick)
-            .background(color = MaterialTheme.colorScheme.secondary)
-            .padding(1.dp),
+            .padding(start = 12.dp, end = 16.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
         Icon(
             painter = painterResource(id = R.drawable.icon_add),
-            contentDescription = "Add note",
+            contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.padding(5.dp)
+            modifier = Modifier.size(18.dp)
         )
+        Spacer(Modifier.width(6.dp))
         Text(
-            text = "Add note",
+            text = "Add Note",
             fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
-            fontSize = 25.sp,
+            fontSize = 24.sp,
             color = Color.White,
-            modifier = Modifier.padding(
-                start = 1.dp,
-                top = 4.dp,
-                end = 14.dp,
-                bottom = 0.dp
-            )
+            modifier = Modifier.padding(top = 4.dp)
         )
     }
 }

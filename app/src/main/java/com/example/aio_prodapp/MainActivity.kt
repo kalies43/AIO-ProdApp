@@ -1,18 +1,27 @@
 package com.example.aio_prodapp
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -31,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.DpOffset
@@ -39,15 +50,19 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.aio_prodapp.debug.DebugPanelDialog
+import com.example.aio_prodapp.debug.DebugTools
 import com.example.aio_prodapp.ui.theme.AIOProdAppTheme
-
-/*
-Kulang kapa ng onClick functionality,
-Recyclesitems (ung cards na reusable for the notes)
-ung status summary like, 3 notes 2reminders. and the rest of the screens to do.
-*/
+import com.example.aio_prodapp.viewmodel.AppViewModelProvider
+import com.example.aio_prodapp.viewmodel.NotificationsViewModel
 
 class MainActivity : ComponentActivity() {
+
+    private var initialNoteId = mutableStateOf<Int?>(null)
+    private var initialTaskId = mutableStateOf<Int?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -57,22 +72,81 @@ class MainActivity : ComponentActivity() {
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())
 
+        handleNotificationIntent(intent)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
         setContent {
             AIOProdAppTheme {
-                MainAppStructure()
+                MainAppStructure(
+                    initialNoteId = initialNoteId.value,
+                    initialTaskId = initialTaskId.value
+                )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        if (intent == null) return
+        if (intent.hasExtra("note_id")) {
+            val id = intent.getIntExtra("note_id", -1)
+            if (id != -1) initialNoteId.value = id
+        }
+        if (intent.hasExtra("task_id")) {
+            val id = intent.getIntExtra("task_id", -1)
+            if (id != -1) initialTaskId.value = id
         }
     }
 }
 
 @Composable
-fun MainAppStructure(startIndex: Int = 0) {
-    // The selected tab lives here so both the bottom bar and the content can use it
-    var selectedIndex by remember { mutableIntStateOf(startIndex) }
+fun MainAppStructure(
+    initialNoteId: Int? = null,
+    initialTaskId: Int? = null,
+    notificationsViewModel: NotificationsViewModel? = if (LocalInspectionMode.current) null else viewModel(factory = AppViewModelProvider.Factory)
+) {
+    val isPreview = LocalInspectionMode.current
+    val hasUnread = if (isPreview || notificationsViewModel == null) {
+        true
+    } else {
+        notificationsViewModel.hasUnread.collectAsStateWithLifecycle().value
+    }
+
+    var pendingNoteId by remember(initialNoteId) { mutableStateOf(initialNoteId) }
+    var pendingTaskId by remember(initialTaskId) { mutableStateOf(initialTaskId) }
+    var showNotificationOverlay by remember { mutableStateOf(false) }
+
+    var selectedIndex by remember(initialNoteId, initialTaskId) {
+        mutableIntStateOf(
+            when {
+                initialTaskId != null -> 2
+                initialNoteId != null -> 0
+                else -> 0
+            }
+        )
+    }
+
+    var showDebugPanel by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        topBar = { TopBar() },
+        topBar = {
+            TopBar(
+                hasUnread = hasUnread,
+                onBellClick = { showNotificationOverlay = true },
+                onHamburgerLongPress = { showDebugPanel = true }
+            )
+        },
         bottomBar = {
             BottomBar(
                 selectedIndex = selectedIndex,
@@ -86,16 +160,53 @@ fun MainAppStructure(startIndex: Int = 0) {
                 .padding(innerPadding)
         ) {
             when (selectedIndex) {
-                0 -> MyNotesScreen()   // lives in NotesScreen.kt
-                2 -> TasksScreen()     // lives in TasksScreen.kt
-                else -> { /* Focus and Profile screens coming later */ }
+                0 -> MyNotesScreen(
+                    pendingNoteId = pendingNoteId,
+                    onClearPendingNoteId = { pendingNoteId = null }
+                )
+                1 -> FocusScreen()
+                2 -> TasksScreen(
+                    pendingTaskId = pendingTaskId,
+                    onClearPendingTaskId = { pendingTaskId = null }
+                )
+                3 -> ProfileScreen(onOpenDebugPanel = { showDebugPanel = true })
             }
         }
     }
+
+    if (showNotificationOverlay) {
+        NotificationHistoryOverlay(
+            onDismiss = { showNotificationOverlay = false },
+            onNavigateToNote = { noteId ->
+                pendingNoteId = noteId
+                selectedIndex = 0
+                showNotificationOverlay = false
+            },
+            onNavigateToTask = { taskId ->
+                pendingTaskId = taskId
+                selectedIndex = 2
+                showNotificationOverlay = false
+            },
+            onNavigateToFocus = {
+                selectedIndex = 1
+                showNotificationOverlay = false
+            },
+            viewModel = notificationsViewModel
+        )
+    }
+
+    if (showDebugPanel) {
+        DebugPanelDialog(onDismiss = { showDebugPanel = false })
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TopBar() {
+fun TopBar(
+    hasUnread: Boolean = false,
+    onBellClick: () -> Unit = {},
+    onHamburgerLongPress: () -> Unit = {}
+) {
     Surface(color = Color.Transparent) {
         Row(
             modifier = Modifier
@@ -103,24 +214,43 @@ fun TopBar() {
                 .padding(16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            IconButton(onClick = { }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.icon_hamburg),
-                    contentDescription = null
-                )
-            }
-            IconButton(onClick = { }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.icon_bell),
-                    contentDescription = null
-                )
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .then(
+                        if (DebugTools.enabled) {
+                            Modifier.combinedClickable(onClick = { }, onLongClick = onHamburgerLongPress)
+                        } else {
+                            Modifier
+                        }
+                    )
+            )
+            IconButton(onClick = onBellClick) {
+                Box {
+                    Icon(
+                        painter = painterResource(id = R.drawable.icon_bell),
+                        contentDescription = "Notifications"
+                    )
+                    if (hasUnread) {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .align(Alignment.TopEnd)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.error)
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun BottomBar(selectedIndex: Int, onTabSelected: (Int) -> Unit) {
+fun BottomBar(
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit
+) {
     val tabs = listOf(
         R.drawable.icon_note_edit to "Notes",
         R.drawable.icon_target to "Focus",
@@ -175,7 +305,7 @@ fun BottomBarItem(
             )
             .clip(shape)
             .clickable(onClick = onClick)
-            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 0.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
