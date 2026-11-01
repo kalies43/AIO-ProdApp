@@ -1,9 +1,11 @@
 package com.example.aio_prodapp.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aio_prodapp.data.NoteEntity
 import com.example.aio_prodapp.data.NoteRepository
+import com.example.aio_prodapp.reminders.ReminderScheduler
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -26,6 +28,7 @@ class NotesViewModel(private val repo: NoteRepository) : ViewModel() {
 
     /** id == null adds a new note; otherwise edits that note. onResult(false) = keep the dialog open. */
     fun saveNote(
+        context: Context? = null,
         id: Int?,
         title: String,
         description: String,
@@ -34,15 +37,23 @@ class NotesViewModel(private val repo: NoteRepository) : ViewModel() {
     ) {
         if (title.isBlank()) { onResult(false); return }
         launchWrite(onResult) {
-            if (id == null) repo.addNote(title, description, reminderDate)
-            else repo.updateNote(id, title, description, reminderDate)
-            // TODO(Phase 7): schedule / reschedule / cancel this note's reminder job here.
+            val noteId = if (id == null) {
+                repo.addNote(title, description, reminderDate)
+            } else {
+                repo.updateNote(id, title, description, reminderDate)
+                id
+            }
+            context?.let { ReminderScheduler.scheduleNoteReminder(it, noteId, reminderDate) }
         }
     }
 
-    fun deleteNote(id: Int, onResult: (Boolean) -> Unit = {}) = launchWrite(onResult) {
+    fun deleteNote(
+        context: Context? = null,
+        id: Int,
+        onResult: (Boolean) -> Unit = {}
+    ) = launchWrite(onResult) {
         repo.deleteNote(id)
-        // TODO(Phase 7): cancel this note's reminder job here.
+        context?.let { ReminderScheduler.cancelNoteReminder(it, id) }
     }
 
     /** For pendingNoteId: look the note up, then open its Edit dialog. */

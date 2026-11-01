@@ -109,11 +109,11 @@ fun DebugPanelDialog(onDismiss: () -> Unit) {
 
                 DebugButton("Fire test note reminder", enabled = !busy) {
                     confirmClear = false
-                    run { DebugData.fireTestNoteReminder(db) }
+                    run { DebugData.fireTestNoteReminder(context, db) }
                 }
                 DebugButton("Fire test task reminder", enabled = !busy) {
                     confirmClear = false
-                    run { DebugData.fireTestTaskReminder(db) }
+                    run { DebugData.fireTestTaskReminder(context, db) }
                 }
                 DebugButton("Seed sample data", enabled = !busy) {
                     confirmClear = false

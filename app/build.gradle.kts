@@ -60,6 +60,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // WorkManager (Reminders)
+    implementation(libs.androidx.work.runtime.ktx)
+
     // ViewModel + collectAsStateWithLifecycle, and icons for back/close
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

@@ -325,6 +325,7 @@ fun TasksScreen(
                         },
                         onToggleDone = { done ->
                             actualViewModel?.setTaskDone(
+                                context = context,
                                 taskId = task.id,
                                 done = done,
                                 onResult = { success ->
@@ -350,6 +351,7 @@ fun TasksScreen(
             onDismiss = { showAddTaskDialog = false },
             onSave = { title, description, reminderDate, priority, notes, newSubtasks ->
                 actualViewModel?.saveTask(
+                    context = context,
                     id = null,
                     title = title,
                     description = description,
@@ -377,6 +379,7 @@ fun TasksScreen(
             onDismiss = { editingTask = null },
             onSave = { title, description, reminderDate, priority, notes, _ ->
                 actualViewModel?.saveTask(
+                    context = context,
                     id = task.id,
                     title = title,
                     description = description,
@@ -404,6 +407,7 @@ fun TasksScreen(
             message = "Are you sure you want to delete?",
             onConfirm = {
                 actualViewModel?.deleteTask(
+                    context = context,
                     taskId = task.id,
                     onResult = { success ->
                         if (!success) {
@@ -1095,6 +1099,6 @@ private fun TaskDialogTextField(
 @Composable
 fun TasksScreenPreview() {
     AIOProdAppTheme {
-        MainAppStructure(startIndex = 2)
+        TasksScreen()
     }
 }

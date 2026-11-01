@@ -1,5 +1,6 @@
 package com.example.aio_prodapp.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aio_prodapp.data.SubtaskEntity
@@ -7,6 +8,7 @@ import com.example.aio_prodapp.data.TaskEntity
 import com.example.aio_prodapp.data.TaskFilter
 import com.example.aio_prodapp.data.TaskPriority
 import com.example.aio_prodapp.data.TaskRepository
+import com.example.aio_prodapp.reminders.ReminderScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +30,6 @@ data class TasksUiState(
 
 class TasksViewModel(private val repo: TaskRepository) : ViewModel() {
 
-    // Kept as separate flows so the search TextField and tab chips update synchronously.
     private val _filter = MutableStateFlow(TaskFilter.ALL)
     val filter: StateFlow<TaskFilter> = _filter.asStateFlow()
 
@@ -57,6 +58,7 @@ class TasksViewModel(private val repo: TaskRepository) : ViewModel() {
      * otherwise edits the task's own fields. onResult gets the task id, or null if the write failed.
      */
     fun saveTask(
+        context: Context? = null,
         id: Int?,
         title: String,
         description: String,
@@ -74,20 +76,35 @@ class TasksViewModel(private val repo: TaskRepository) : ViewModel() {
                 repo.updateTask(id, title, description, reminderDate, priority, notes)
                 id
             }
-            // TODO(Phase 7): schedule / reschedule / cancel this task's reminder job here.
+            context?.let { ReminderScheduler.scheduleTaskReminder(it, savedId, reminderDate) }
             savedId
         }
     }
 
     /** The card checkbox. Moves the task between Active and Done and writes / removes the log row. */
-    fun setTaskDone(taskId: Int, done: Boolean, onResult: (Boolean) -> Unit = {}) = launchWrite(onResult) {
-        repo.setDone(taskId, done)
-        // TODO(Phase 7): cancel the reminder when checked; re-schedule when unchecked (date today or later).
+    fun setTaskDone(
+        context: Context? = null,
+        taskId: Int,
+        done: Boolean,
+        onResult: (Boolean) -> Unit = {}
+    ) = launchWrite(onResult) {
+        val updatedTask = repo.setDone(taskId, done)
+        context?.let { ctx ->
+            if (done) {
+                ReminderScheduler.cancelTaskReminder(ctx, taskId)
+            } else if (updatedTask?.reminderDate != null) {
+                ReminderScheduler.scheduleTaskReminder(ctx, taskId, updatedTask.reminderDate)
+            }
+        }
     }
 
-    fun deleteTask(taskId: Int, onResult: (Boolean) -> Unit = {}) = launchWrite(onResult) {
+    fun deleteTask(
+        context: Context? = null,
+        taskId: Int,
+        onResult: (Boolean) -> Unit = {}
+    ) = launchWrite(onResult) {
         repo.deleteTask(taskId)
-        // TODO(Phase 7): cancel this task's reminder job here.
+        context?.let { ReminderScheduler.cancelTaskReminder(it, taskId) }
     }
 
     /** For pendingTaskId: look the task up, then open its Task Details dialog. */

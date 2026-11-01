@@ -1,5 +1,6 @@
 package com.example.aio_prodapp.debug
 
+import android.content.Context
 import androidx.room.withTransaction
 import com.example.aio_prodapp.data.ActivityLogEntity
 import com.example.aio_prodapp.data.ActivityType
@@ -24,30 +25,32 @@ object DebugData {
 
     // ---- Fire test reminders ------------------------------------------------------------
 
-    suspend fun fireTestNoteReminder(db: AppDatabase): String {
+    suspend fun fireTestNoteReminder(context: Context, db: AppDatabase): String {
         val note = db.noteDao().getFirstWithReminder()
             ?: return "No note has a reminder yet. Tap \"Seed sample data\" first."
+        val body = preview(note.description)
         NotificationRepository(db.notificationDao()).add(
             type = NotificationType.NOTE_REMINDER,
             title = note.title,
-            body = preview(note.description),
+            body = body,
             noteId = note.id
         )
-        // TODO(Phase 7): call the real reminder path here so a system notification is posted too.
-        return "History row added for note \"${note.title}\". The bell should show an unread dot."
+        com.example.aio_prodapp.reminders.ReminderScheduler.postNoteSystemNotification(context, note.id, note.title, body)
+        return "History row & notification posted for note \"${note.title}\"."
     }
 
-    suspend fun fireTestTaskReminder(db: AppDatabase): String {
+    suspend fun fireTestTaskReminder(context: Context, db: AppDatabase): String {
         val task = db.taskDao().getFirstWithReminder()
             ?: return "No unchecked task has a reminder yet. Tap \"Seed sample data\" first."
+        val body = preview(task.description)
         NotificationRepository(db.notificationDao()).add(
             type = NotificationType.TASK_REMINDER,
             title = task.title,
-            body = preview(task.description),
+            body = body,
             taskId = task.id
         )
-        // TODO(Phase 7): call the real reminder path here so a system notification is posted too.
-        return "History row added for task \"${task.title}\". The bell should show an unread dot."
+        com.example.aio_prodapp.reminders.ReminderScheduler.postTaskSystemNotification(context, task.id, task.title, body)
+        return "History row & notification posted for task \"${task.title}\"."
     }
 
     private fun preview(description: String): String =

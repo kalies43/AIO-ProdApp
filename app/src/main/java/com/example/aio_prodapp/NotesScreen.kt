@@ -247,6 +247,7 @@ fun MyNotesScreen(
             onDismiss = { editingNote = null },
             onSave = { title, description, reminder ->
                 actualViewModel?.saveNote(
+                    context = context,
                     id = note.id,
                     title = title,
                     description = description,
@@ -270,6 +271,7 @@ fun MyNotesScreen(
             onDismiss = { showAddDialog = false },
             onSave = { title, description, reminder ->
                 actualViewModel?.saveNote(
+                    context = context,
                     id = null,
                     title = title,
                     description = description,
@@ -291,6 +293,7 @@ fun MyNotesScreen(
             message = "Are you sure you want to delete?",
             onConfirm = {
                 actualViewModel?.deleteNote(
+                    context = context,
                     id = note.id,
                     onResult = { success ->
                         if (!success) {

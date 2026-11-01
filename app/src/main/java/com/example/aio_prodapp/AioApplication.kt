@@ -10,11 +10,14 @@ import com.example.aio_prodapp.data.NotificationRepository
 import com.example.aio_prodapp.data.ProfileRepository
 import com.example.aio_prodapp.data.TaskRepository
 
+import com.example.aio_prodapp.reminders.ReminderScheduler
+
 /** Registered in AndroidManifest.xml as android:name=".AioApplication". */
 class AioApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         DebugTools.init(this) // real in debug builds, empty stub in release
+        ReminderScheduler.createNotificationChannel(this)
     }
 
     val container: AppContainer by lazy { AppContainer(this) }
