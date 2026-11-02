@@ -280,35 +280,26 @@ fun TasksScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        // List or Empty state
-        if (!uiState.hasAnyTasks && uiState.isLoaded) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No tasks yet. Tap Add Task to get started.",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else if (uiState.tasks.isEmpty() && uiState.isLoaded) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No tasks match.",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center
-                )
-            }
+        // List, Loading, or Empty state
+        if (!uiState.isLoaded) {
+            LoadingStateView(
+                message = "Loading tasks...",
+                modifier = Modifier.weight(1f)
+            )
+        } else if (!uiState.hasAnyTasks) {
+            EmptyStateView(
+                iconRes = R.drawable.icon_task_complete,
+                title = "No tasks yet",
+                subtitle = "Tap Add Task to get started.",
+                modifier = Modifier.weight(1f)
+            )
+        } else if (uiState.tasks.isEmpty()) {
+            EmptyStateView(
+                iconRes = R.drawable.icon_search,
+                title = "No tasks match",
+                subtitle = "Try searching for a different term or changing filters.",
+                modifier = Modifier.weight(1f)
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
