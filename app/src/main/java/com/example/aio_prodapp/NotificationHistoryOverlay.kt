@@ -193,19 +193,12 @@ fun NotificationHistoryOverlay(
             Spacer(Modifier.height(16.dp))
 
             if (entries.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No notifications yet.",
-                        fontSize = 14.sp,
-                        color = DialogLabel,
-                        textAlign = TextAlign.Center
-                    )
-                }
+                EmptyStateView(
+                    iconRes = R.drawable.icon_bell,
+                    title = "No notifications yet",
+                    subtitle = "Your reminder and focus alerts will appear here.",
+                    modifier = Modifier.weight(1f)
+                )
             } else {
                 val groupedEntries = entries.groupBy { groupForTimestamp(it.createdAt) }
 
